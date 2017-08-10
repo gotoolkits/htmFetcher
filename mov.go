@@ -27,8 +27,9 @@ func main() {
 	//获取爬取站点列表与匹配规则
 	sm := getSiteList()
 
-	//迭代爬取内容
+	//迭代List爬取内容
 	for _, v := range sm {
+
 		s, err := spider.CreateSpiderFromUrl(v.url)
 		ErrCheck(err, "create spider from url failed!")
 
@@ -52,20 +53,43 @@ func main() {
 func getSiteList() []siteMatch {
 
 	var list []siteMatch
+
 	// add the site matcher info to list
 	var (
-		r1 spider.Rules = spider.Rules{
+		//site01
+		name1 spider.DyGang = spider.DyGang{}
+		r1    spider.Rules  = spider.Rules{
+			&name1,
 			"html>body>table>tbody>tr>td>div#tl>div#tab1_div_0>table>tbody>tr>td>table>tbody>tr>td>table>tbody>tr>td",
 			"table>tbody>tr>td>a>img",
 			"a.c2",
-			"src"}
+			"src",
+			spider.Rule{}}
 		sm1 siteMatch = siteMatch{"http://www.dygang.net/", r1}
-	)
-	list = append(list, sm1)
 
-	// add others
-	//
-	//
+		//site02
+		name2 spider.DdFilm = spider.DdFilm{}
+		sub2  spider.Rule   = spider.Rule{
+			"#wx_pic > img.pic",
+			"src"}
+		r2 spider.Rules = spider.Rules{
+			&name2,
+			"#content>div>table>tbody>tr>td",
+			"a:nth-child(3)",
+			"a:nth-child(3)",
+			"title",
+			sub2}
+		sm2 siteMatch = siteMatch{"http://www.bd-film.com/zx/index.htm", r2}
+
+		// add others site
+		//
+		//
+
+	)
+
+	list = append(list, sm1)
+	list = append(list, sm2)
+	// list = append(list, X)
 
 	return list
 }

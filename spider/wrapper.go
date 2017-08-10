@@ -23,6 +23,11 @@ import (
 	"github.com/gotoolkits/htmFetcher/conv"
 )
 
+type MovInfo interface {
+	GetImgUrl(sl *goquery.Selection, r Rules) string
+	GetName(sl *goquery.Selection, r Rules) string
+}
+
 // Spider
 type Spider struct {
 	Url string // page that spider would deal with
@@ -30,10 +35,16 @@ type Spider struct {
 }
 
 type Rules struct {
+	Name     MovInfo
 	HtmlRule string
 	ImgRule  string
 	TextRule string
 	Attr     string
+	Sub      Rule
+}
+type Rule struct {
+	R    string
+	Attr string
 }
 
 type MovStor struct {
@@ -136,7 +147,7 @@ func (s *Spider) GetMovAttr(r Rules) ([]MovAttr, error) {
 		ma  = MovAttr{}
 		wg  sync.WaitGroup
 		mu  sync.Mutex
-		ok  bool
+		//ok  bool
 	)
 
 	s.doc.Find(r.HtmlRule).Each(func(ix int, sl *goquery.Selection) {
@@ -145,9 +156,10 @@ func (s *Spider) GetMovAttr(r Rules) ([]MovAttr, error) {
 			defer wg.Done()
 
 			mu.Lock()
-			ma.ImgUrl, ok = sl.Find(r.ImgRule).Eq(0).Attr(r.Attr)
-			if ok {
-				ma.Info = s.StrConvGBK(sl.Find(r.TextRule).Eq(0).Text())
+
+			ma.ImgUrl = r.Name.GetImgUrl(sl, r)
+			if ma.ImgUrl != "" {
+				ma.Info = r.Name.GetName(sl, r)
 				res = append(res, ma)
 			}
 			mu.Unlock()
@@ -158,7 +170,7 @@ func (s *Spider) GetMovAttr(r Rules) ([]MovAttr, error) {
 }
 
 // 增加GBK编码
-func (s *Spider) StrConvGBK(str string) string {
+func StrConvGBK(str string) string {
 
 	decode := conv.NewDecoder("GBK")
 	if decode == nil {
