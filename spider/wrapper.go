@@ -1,31 +1,22 @@
-// Copyright 2016 laosj Author @songtianyi. All Rights Reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package spider
 
 import (
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/gotoolkits/htmFetcher/conv"
+	"github.com/gotoolkits/htmFetcher/go-phantomjs-fetcher"
 )
 
 type MovInfo interface {
+	NewRules() Rules
 	GetImgUrl(sl *goquery.Selection, r Rules) string
 	GetName(sl *goquery.Selection, r Rules) string
+	GetDownload(sl *goquery.Selection, r Rules) []string
 }
 
 // Spider
@@ -35,15 +26,15 @@ type Spider struct {
 }
 
 type Rules struct {
-	Name     MovInfo
+	//	Name     MovInfo
 	HtmlRule string
-	ImgRule  string
-	TextRule string
-	Attr     string
-	Sub      Rule
+	ImgRule  Rule
+	TextRule Rule
+	Download Rule
 }
 type Rule struct {
-	R    string
+	Url  string
+	Ru   string
 	Attr string
 }
 
@@ -54,8 +45,9 @@ type MovStor struct {
 }
 
 type MovAttr struct {
-	ImgUrl string `json:"imgUrl"`
-	Info   string `json:"filmName"`
+	ImgUrl   string   `json:"imgUrl"`
+	Info     string   `json:"filmName"`
+	Download []string `json:"Download"`
 }
 
 // Start spider
@@ -87,6 +79,7 @@ func (s *Spider) GetHtml(rule string) ([]string, error) {
 		go func() {
 			defer wg.Done()
 			content, _ := sl.Html()
+			//sc := StrConvUTF8(content)
 			mu.Lock()
 			res = append(res, content)
 			mu.Unlock()
@@ -141,7 +134,7 @@ func (s *Spider) GetAttr(rule, attr string) ([]string, error) {
 }
 
 // 增加多级过滤
-func (s *Spider) GetMovAttr(r Rules) ([]MovAttr, error) {
+func (s *Spider) GetMovAttr(i MovInfo) ([]MovAttr, error) {
 	var (
 		res = []MovAttr{}
 		ma  = MovAttr{}
@@ -149,30 +142,77 @@ func (s *Spider) GetMovAttr(r Rules) ([]MovAttr, error) {
 		mu  sync.Mutex
 		//ok  bool
 	)
+	r := i.NewRules()
 
+	start := time.Now()
 	s.doc.Find(r.HtmlRule).Each(func(ix int, sl *goquery.Selection) {
+
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 
 			mu.Lock()
 
-			ma.ImgUrl = r.Name.GetImgUrl(sl, r)
+			ma.ImgUrl = i.GetImgUrl(sl, r)
 			if ma.ImgUrl != "" {
-				ma.Info = r.Name.GetName(sl, r)
+				ma.Info = i.GetName(sl, r)
+				ma.Download = i.GetDownload(sl, r)
 				res = append(res, ma)
 			}
 			mu.Unlock()
 		}()
 	})
 	wg.Wait()
+	stop := time.Now()
+	t := stop.Sub(start)
+
+	fmt.Println("Spend time Sec:", t.Seconds())
 	return res, nil
+}
+
+// 增加phantomjs获取url
+func (s *Spider) LoadPtJsUrl(url string) *goquery.Document {
+
+	fetcher, err := phantomjs.NewFetcher(2017, nil)
+	defer fetcher.ShutDownPhantomJSServer()
+	if err != nil {
+		panic(err)
+	}
+
+	// js_script := "function(){document.getElementById('bs-docs-download').onclik();}"
+	// js_run_at := phantomjs.RUN_AT_DOC_END
+
+	resp, err := fetcher.GetWithJS(url, "", "")
+	if err != nil {
+		panic(err)
+	}
+
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(resp.Content))
+	if err != nil {
+		panic(err)
+	}
+
+	return doc
+
 }
 
 // 增加GBK编码
 func StrConvGBK(str string) string {
 
 	decode := conv.NewDecoder("GBK")
+	if decode == nil {
+		fmt.Errorf("Could not create decoder for %s", "utf-8")
+		return "NULL"
+	}
+
+	r := decode.ConvertString(str)
+	return r
+
+}
+
+func StrConvUTF8(str string) string {
+
+	decode := conv.NewDecoder("UTF-8")
 	if decode == nil {
 		fmt.Errorf("Could not create decoder for %s", "utf-8")
 		return "NULL"
